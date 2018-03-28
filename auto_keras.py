@@ -10,9 +10,10 @@ from keras.layers import Dense, Dropout, Activation, Flatten
 from keras.layers.convolutional import Conv2D
 #from keras.layers.convolutional import Conv2D
 from keras.layers.pooling import MaxPooling2D
-#Convolution2D, MaxPooling2D, 
+#Convolution2D, MaxPooling2D,
 from keras.optimizers import Adam
 from keras import regularizers
+from keras.preprocessing.image import ImageDataGenerator
 
 height_input = 100 #height of the input image of the NN
 width_input = 100  #width  of the input image of the NN
@@ -25,23 +26,6 @@ if color == True:
 else:
 	depth = 1
 
-def load_sets():
-	true == false
-	x_set = np.load('x_set.npy')
-	y_set = np.load('y_set.npy')
-	classes = np.load('variable_names.npy')
-	print 'classes : {}'.format(classes)
-	print ('sets loaded')
-	return x_set, y_set
-
-def count_examples(folder_names):
-	tot_pictures = 0
-	for folder in folder_names:
-		pictures = folder+'/*'
-		for picture in glob.glob(pictures):
-			tot_pictures+=1
-	return tot_pictures
-
 def create_variable_names(folder_names, name_size):
 	classes = []
 	for folder in folder_names:
@@ -50,84 +34,25 @@ def create_variable_names(folder_names, name_size):
 	print ('classes saved')
 	return classes
 
-def load_image(height, width, picture, color):
-	if color == True:
-		img = cv2.imread(picture)
-		img = cv2.resize(img,(height,width))
-	else:
-		img = cv2.imread(picture,0)
-		img = cv2.resize(img,(height,width))
-		img = np.expand_dims(img, axis = -1)
-	cv2.imwrite('0.png',img)
-	return img
+train_datagen = ImageDataGenerator(
+        rescale=1./255,
+        shear_range=0.2,
+        zoom_range=0.2,
+        horizontal_flip=True)
 
-def create_sets(folder_name, height, width, color):
-	folder_names = glob.glob(folder_name+'/*')
-	name_size = len(folder_name)
-	classes = create_variable_names(folder_names, name_size)
-	print 'classes : {}'.format(classes)
-	tot_pictures = count_examples(folder_names)
-	
-	y_set = np.zeros((tot_pictures,len(classes)))
-	if color == True:
-		x_set = np.zeros((tot_pictures, height, width, 3))
-	elif color == False:
-		x_set = np.zeros((tot_pictures, height, width, 1))
-	else:
-		print 'color must be True or False'
+test_datagen = ImageDataGenerator(rescale=1./255)
 
-	class_nb = 0
-	tot = 0
-	for i in range(len(folder_names)):
-		pictures = folder_names[i]+'/*'
-		for picture in glob.glob(pictures):
-			x_set[tot,:,:,:] = load_image(height, width, picture,color)
-			y_set[tot,class_nb] = 1
-			tot +=1
-		class_nb +=1
-	
-	np.save('x_set.npy',x_set)
-	np.save('y_set.npy',y_set)
-	print ('sets saved')	
-	return x_set, y_set
+train_generator = train_datagen.flow_from_directory(
+        'data/train',
+        target_size=(150, 150),
+        batch_size=32,
+        class_mode='binary')
 
-def create_train_test(x_set, y_set, train_ratio):
-	nb_examples = y_set.shape[0]
-	train_nb = int(train_ratio*nb_examples)
-	test_nb = nb_examples - train_nb
-	x_train_shape = (train_nb,)+x_set.shape[1:]
-	x_test_shape  = (test_nb,) +x_set.shape[1:]
-	y_train_shape = (train_nb,)+y_set.shape[1:]
-	y_test_shape  = (test_nb,) +y_set.shape[1:]
-
-	random_indices = range(nb_examples)
-	shuffle(random_indices)
-
-	x_train = np.zeros(x_train_shape)
-	x_test = np.zeros(x_test_shape)
-	y_train = np.zeros(y_train_shape)
-	y_test = np.zeros(y_test_shape)
-
-	for cpt in range(len(random_indices)):
-		if cpt < train_nb:
-			x_train[cpt,:,:,:] = x_set[random_indices[cpt],:,:,:]
-			y_train[cpt,:]     = y_set[random_indices[cpt],:]
-		else:
-			x_test[cpt-train_nb,:,:,:] = x_set[random_indices[cpt-train_nb],:,:,:]
-			y_test[cpt-train_nb,:]     = y_set[random_indices[cpt-train_nb],:]
-	return x_train, x_test, y_train, y_test			
-
-try:
-	assert 1==2
-	print "nope"
-	x_set,y_set = load_sets()
-except:
-	print "yep"
-	x_set, y_set = create_sets(folder_name, height_input, width_input, color)
-	
-
-X_train, test_set, Y_train, y_test = create_train_test(x_set, y_set, train_ratio)
-print test_set.shape, y_test.shape
+validation_generator = test_datagen.flow_from_directory(
+        'data/validation',
+        target_size=(150, 150),
+        batch_size=32,
+        class_mode='binary')
 
 
 model = Sequential()
@@ -163,5 +88,11 @@ model.add(Activation('softmax'))
 adam = Adam(lr=0.001, beta_1=0.9, beta_2=0.999, epsilon=1e-08, decay=0.0)
 model.compile(loss='categorical_crossentropy', optimizer=adam, metrics=['accuracy'])
 
-model.fit(X_train, Y_train, validation_split = val_split, batch_size=32, nb_epoch=2000)
+model.fit_generator(
+        train_generator,
+        steps_per_epoch=2000,
+        epochs=50,
+        validation_data=validation_generator,
+        validation_steps=800)
+
 #server.launch(model)
